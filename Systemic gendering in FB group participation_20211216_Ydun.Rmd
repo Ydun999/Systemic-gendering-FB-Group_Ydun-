@@ -1,0 +1,1509 @@
+---
+title: "systemic gendering in FB group_DKSK_JY"
+output:  "Jiyoung Ydun Kim supervised by Riccardo Fusaroli"
+  html_document: default
+  
+    #######  NOTE :
+# In order to facilitate report: x<-marginal_effects(modelName) and then look at the estimates within the x object
+
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+## Libraries
+
+####### Libraries ######
+install.packages(c("effects","ggplot2","tidyr","dplyr","tidyverse","cvms","lme4"))
+install.packages("brms")
+#install.packages("devtools")
+#devtools::install_github("LudvigOlsen/groupdata2")
+#devtools::install_github("LudvigOlsen/cvms")
+
+remove.packages("brms")
+
+library(effects)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(groupdata2)
+library(tidyverse)
+library(cvms)
+library(lme4)
+library(groupdata2)
+library(brms)
+
+if (!requireNamespace("remotes")) {
+  install.packages("remotes")
+}
+remotes::install_github("paul-buerkner/brms")
+
+#################  Data  ############################## 
+d = read.csv('FB_KRDM_2121.csv', sep = ';')
+d_dk = d[d$country == 'Denmark',]
+d_kr = d[d$country == 'Korea',]
+
+dL <- gather(d, group_type, membership, open.groups:secret.groups)
+dL$privacy=1
+dL$privacy[dL$group_type=='closed.groups']=2
+dL$privacy[dL$group_type=='secret.groups']=3
+
+dL$privacy <- as.factor(dL$privacy)
+
+#############
+### Make a column which has how many comments / posts was made within the specific privacy setting #### 
+dL$post_temp = ifelse(dL$privacy==1, dL$post_open, dL$post_closed)
+dL$post_specific = ifelse(dL$privacy==3, dL$post_secret, dL$post_temp)
+
+dL$comment_temp = ifelse(dL$privacy==1, dL$comment_open, dL$comment_closed)
+dL$comment_specific = ifelse(dL$privacy==3, dL$comment_secret, dL$comment_temp)
+
+summary(d)
+summary(dL)
+
+#################
+# review _age spliting to three testing 
+# dL
+young_dL <- filter(dL, age < 30)
+medium_dL <- filter(dL, age > 29 & age < 50)
+old_dL <- filter(dL, age > 49)
+
+#d
+
+young_d <- filter(d, age < 30)
+medium_d <- filter(d, age > 29 & age < 50)
+old_d <- filter(d, age > 49)
+
+#### Renaming the Levels when  the 1,2,3 need to change open closed secret #### 
+#dL_test = dL
+ 
+#dL_test$privacy = as.factor(dL_test$privacy)
+ 
+#levels(dL_test$privacy)[1] = "Open"
+#levels(dL_test$privacy)[2] = "Closed"
+#levels(dL_test$privacy)[3] = "Secret"
+
+```
+
+## Hypothesis 1 friends and gender country
+
+################ finish H1  ######################
+# Establish which model is best and by how much (compare_ic function)
+# Summary of the best model
+# In order to understand the effects use marginal_effects(modelName)
+# If there is a 3-way interaction or higher, marginal_effects does not plot it. So use ggplot.
+# Report
+# In order to facilitate report: x<-marginal_effects(modelName) and then look at the estimates within the x object
+
+To test hypothesis 1 we used Loo-based model comparison with number of friends as outcome measure and country and gender as predictors (both main effects and interaction).
+ 
+ 
+####### H1 Results_ brm #####
+Results 
+
+To test hypothesis 1 we used Loo-based model comparison with number of friends as outcome measure and country and gender as predictors (both main effects and interaction). Loo-based model comparison indicated that the model including the interaction between country and gender was the best fit to the data, even when controlling for overfitting (LOOIC: 619303, SE: 53179). The model estimates a credible interaction between country and gender (b=0.70, se=0.01), with Danish females having more friends than males (mean =261, se=0.728 vs mean197, se=0.65), while Korean females have fewer friends than males (mean=273, se=0.677 vs. mean=417, se=0.879). The estimates also indicate that Korean users tend to have more friends than Danish ones, however, that effect is mostly driven by male users, with female ones being close in their number of friends. See plot xxx.
+
+
+
+```{r}
+
+##### H1: Gender Inequality and FRIENDS ######
+
+# Checking for whether there is zero friends inflation
+ggplot(d,aes(friend_count,fill=country)) + geom_density()
+sum(d$friend_count==0)
+mean(log(d$friend_count[d$friend_count>0]))
+
+################## Run H1 #####################
+#Run all models
+get_prior(friend_count ~ 1,d,family=poisson)
+prior0 <- c(prior(normal(5,1),class=Intercept))
+prior <- c(prior(normal(5,1),class=Intercept),
+              prior(normal(0,1),class=b))
+
+mFriends0 = brm(friend_count ~ 1, data=d, prior=prior0, sample_prior=TRUE, family=poisson,cores=2,chains=2)
+mFriends0 <- add_ic(mFriends0,ic="loo")
+mFriends1 = brm(friend_count ~ 1 + country , data=d, family=poisson, prior=prior,sample_prior=TRUE,cores=2,chains=2)
+mFriends1 <- add_ic(mFriends1,ic="loo")
+mFriends2 = brm(friend_count ~ 1 + country + gender ,data=d, family=poisson,prior=prior,sample_prior=TRUE,cores=2,chains=2)
+mFriends2 <- add_ic(mFriends2,ic="loo")
+mFriends3 = brm(friend_count ~ 1 + country * gender ,data=d, family=poisson,prior=prior,sample_prior=TRUE,cores=2,chains=2)
+mFriends3 <- add_ic(mFriends3,ic="loo")
+
+#Compare
+FriendICs = compare_ic(mFriends0, mFriends1,mFriends2,mFriends3)
+#Save as a file
+save(mFriends0, mFriends1, mFriends2, mFriends3, FriendICs, file = "Results/H1_FriendsResults")
+
+pp_check(mFriends3,nsamples=200)
+
+#### Load result of H1######
+
+load("Results/H1_FriendsResults")
+
+###### what's the best model? choose the lowest #
+
+FriendICs
+#                      LOOIC       SE
+# mFriends0             664278.34 60408.18
+# mFriends1             640099.14 55326.68
+# mFriends2             636550.68 54120.01
+# mFriends3             619218.12 53171.99
+# mFriends0 - mFriends1  24179.21  6964.44
+# mFriends0 - mFriends2  27727.67  8438.26
+# mFriends0 - mFriends3  45060.23 11939.49
+# mFriends1 - mFriends2   3548.46  2999.41
+# mFriends1 - mFriends3  20881.02  7480.20
+# mFriends2 - mFriends3  17332.56  5382.59
+
+
+#Model 3 is the best- check the model 
+
+summary(mFriends3)
+################ H1 Plot results ######################
+
+ggplot(d,aes(country, friend_count))+geom_point()+facet_grid(.~gender)
+
+ggplot(d, aes(gender, friend_count)) +
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge") + geom_errorbar(stat = "summary", fun.data = mean_se, position = "dodge") + 
+  facet_grid(.~country)
+
+# plot(marginal_effects(mFriends3))
+# Riccarod_Replace with the marginal effects pic
+H1Effects_d = marginal_effects(mFriends3)
+
+plot(H1Effects_d)
+
+hypothesis(mFriends3, "Intercept > genderMALE ")
+hypothesis(mFriends3, "Intercept + countryKorea < genderMALE + countryKorea:genderMALE ")
+hypothesis(mFriends3, " genderMALE < countryKorea:genderMALE ")
+
+############################### hypothesis test  ###################################
+# hypothesis(ModelName, "Intercept > genderMALE ")
+# which should give you:
+# -	An estimate of the difference (plus CI)
+# An evidence ratio and credibility (evidence should be >3, credibility ideally
+
+hypothesis(mFriends3, "Intercept > genderMALE ")
+
+# Add hypothesis testing
+# hypothesis(ModelName, "Intercept + countryKorea < genderMALE + countryKorea:genderMALE ")
+# which should give you:
+# -	An estimate of the difference (plus CI)
+# An evidence ratio and credibility (evidence should be >3, credibility ideally
+
+hypothesis(mFriends3, "Intercept + countryKorea < genderMALE + countryKorea:genderMALE ")
+
+# Add hypothesis testing
+# hypothesis(ModelName, " genderMALE < countryKorea:genderMALE ")
+hypothesis(mFriends3, " genderMALE < countryKorea:genderMALE ")
+#################################################################################
+
+##################################################################################
+########  ICS_ age testing  ##############################
+
+# young_d <- filter(d, age < 30)
+# medium_d <- filter(d, age > 29 & age < 50)
+# old_d <- filter(d, age > 49)
+
+##### young_d #### 
+
+get_prior(friend_count ~ 1,young_d,family=poisson)
+prior0_young_d <- c(prior(normal(5,1),class=Intercept))
+prior_young_d <- c(prior(normal(5,1),class=Intercept),
+              prior(normal(0,1),class=b))
+
+
+mFriends3_young_d = brm(friend_count ~ 1 + country * gender ,data=young_d, family=poisson,prior=prior,sample_prior=TRUE,cores=2,chains=2)
+mFriends3_young_d <- add_ic(mFriends3_young_d,ic="loo")
+
+summary(mFriends3_young_d)
+
+##  young_d_ plot  ## 
+
+ggplot(young_d,aes(country, friend_count))+geom_point()+facet_grid(.~gender)
+
+ggplot(young_d, aes(gender, friend_count)) +
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge") + geom_errorbar(stat = "summary", fun.data = mean_se, position = "dodge") + 
+  facet_grid(.~country)
+
+H1Effects_young_d = conditional_effects(mFriends3_young_d)
+
+plot(H1Effects_young_d)
+#### 
+######   medium_d    #####
+
+get_prior(friend_count ~ 1,medium_d,family=poisson)
+prior0_medium_d <- c(prior(normal(5,1),class=Intercept))
+prior_medium_d <- c(prior(normal(5,1),class=Intercept),
+              prior(normal(0,1),class=b))
+
+mFriends3_medium_d = brm(friend_count ~ 1 + country * gender ,data=medium_d, family=poisson,prior=prior,sample_prior=TRUE,cores=2,chains=2)
+mFriends3_medium_d <- add_ic(mFriends3_medium_d,ic="loo")
+
+summary(mFriends3_medium_d)
+
+#####  medium_d_ plot ##
+
+ggplot(medium_d,aes(country, friend_count))+geom_point()+facet_grid(.~gender)
+
+ggplot(medium_d, aes(gender, friend_count)) +
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge") + geom_errorbar(stat = "summary", fun.data = mean_se, position = "dodge") + 
+  facet_grid(.~country)
+
+H1Effects_medium_d = conditional_effects(mFriends3_medium_d)
+
+plot(H1Effects_medium_d)
+
+### 
+### old_d ### 
+
+get_prior(friend_count ~ 1,old_d,family=poisson)
+prior0_old_d <- c(prior(normal(5,1),class=Intercept))
+prior_old_d <- c(prior(normal(5,1),class=Intercept),
+              prior(normal(0,1),class=b))
+
+mFriends3_old_d = brm(friend_count ~ 1 + country * gender ,data=old_d, family=poisson,prior=prior,sample_prior=TRUE,cores=2,chains=2)
+mFriends3_old_d <- add_ic(mFriends3_old_d,ic="loo")
+
+summary(mFriends3_old_d)
+
+### old_d  plot ### 
+ggplot(old_d,aes(country, friend_count))+geom_point()+facet_grid(.~gender)
+
+ggplot(old_d, aes(gender, friend_count)) +
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge") + geom_errorbar(stat = "summary", fun.data = mean_se, position = "dodge") + 
+  facet_grid(.~country)
+
+H1Effects_old_d = conditional_effects(mFriends3_old_d)
+
+plot(H1Effects_old_d)
+
+
+#######################################################################################
+
+```
+
+
+## Hypothesis 2 - all_group membership, opend.group, closed.group, secret.group
+
+results 
+
+To test hypothesis 2, we used Loo-based model comparison with number of group memberships as outcome measure and country, gender and privacy as predictors. Loo-based model comparison indicated that the model including the interaction between country, gender and privacy was the best fit to the data, even when controlling for overfitting (LOOIC: 29074, SE:387.85). 
+We observe a significant interaction among country, gender and privacy (b=-0.71., se=0.02).  Danish females have  more group membership than males in three privacy groups (females: open mean= 7.51, se=.9.68 ; closed mean=10.59, se=14.17 ; secret mean=2.84. se=3.51 vs males open mean=6.39, se=10.26 ; closed mean=5.27, se=7.19; secret mean=1.69. se=2.77). In south Korea we see the opposite patterns:  Korean females have fewer group membership than males in three privacy groups(females: open mean= 3.13, se=.17.87 ; closed mean=2.00, se=4.25 ; secret mean=1.05. se=3.38 vs males open mean=6.90, se=25.04 ; closed mean=3.55, se=7.92; secret mean=1.59. se=4.60). The estimates also indicate that Danish users tend to have more group membership than Korean ones, however, that effect is mostly driven by female users, with male ones being close in their number of membership. 
+
+
+
+
+```{r}
+
+##### H2: Gender Inequality and Group membership ######
+
+# First we eyeball the data to assess whether zero inflation is an empirical issue, given it might be a conceptual one (people just not being into groups)
+ggplot(dL,aes(membership,fill=country)) + geom_density() # Big peak at 0! So it might be a problem
+sum(dL$membership==0) # count how many datapoints are 0: >2000 lots!
+
+# Ok First business as usual: let's build a poisson regression, prograssively adding predictors to see whether they matter in helping explaining the data
+get_prior(membership ~ 1 + (1  | fb_user_id),dL,family=poisson) # We check which priors we need to set
+
+# A prior for the null modek (without predictors)
+# prior0 <- c(prior(normal(1,1),class=Intercept), 
+#             prior(normal(0,.1),class=sd))
+# # A prior for the models with preditors
+# prior <- c(prior(normal(1,1),class=Intercept),
+#               prior(normal(0,1),class=b),
+#               prior(normal(0,.1),class=sd))
+
+# new prior from Riccardo
+# A prior for the null model (without predictors)
+prior0 <- c(prior(normal(-2,1),class=Intercept), # Do I need to change all the name?
+            prior(normal(0,.1),class=sd))
+   
+# A prior for the models with predictors
+prior <- c(prior(normal(-2,1),class=Intercept),
+           prior(normal(0,.5),class=b),
+           prior(normal(0,.1),class=sd))
+
+# Are the priors sensible at all??? Let's run a model that doesn't look at the data, only at the priors and check predictions
+mGroupPrivacy5_prior = brm(bf(membership ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id)),
+                         data=dL, family=poisson, prior=prior,
+                      sample_prior="only",cores=2,chains=2)
+
+pp_check(mGroupPrivacy5_prior,nsamples=100)
+
+################################################################################
+########################### H2_ Run Models #####################################
+#Run the Poisson models
+mGroupPrivacy0 = brm(membership ~ 1  + (1  | fb_user_id) ,data=dL, family=poisson, 
+                     prior=prior0, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy0") # when the file save in, don't need to run again 
+mGroupPrivacy0 <- add_ic(mGroupPrivacy0,ic="loo")
+mGroupPrivacy1 = brm(membership ~ 1 + privacy + (1 + privacy | fb_user_id) ,data=dL, family=poisson,
+                     prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy1")
+mGroupPrivacy1 <- add_ic(mGroupPrivacy1,ic="loo")
+mGroupPrivacy2 = brm(membership ~ 1 + country * privacy + (1 + privacy | fb_user_id) ,data=dL, family=poisson,
+                     prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy2")
+mGroupPrivacy2 <- add_ic(mGroupPrivacy2,ic="loo")
+mGroupPrivacy3 = brm(membership ~ 1 + gender * privacy + (1 + privacy | fb_user_id) ,data=dL, family=poisson, 
+                     prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy3")
+mGroupPrivacy3 <- add_ic(mGroupPrivacy3,ic="loo")
+mGroupPrivacy4 = brm(membership ~ 1 + (country + gender) * privacy + (1 + privacy | fb_user_id) ,data=dL, family=poisson,  
+                     prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy4")
+mGroupPrivacy4 <- add_ic(mGroupPrivacy4,ic="loo")
+# best model 
+mGroupPrivacy5 = brm(membership ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id) ,data=dL, family=poisson,
+                     prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy5")
+mGroupPrivacy5 <- add_ic(mGroupPrivacy5,ic="loo")
+
+#############################################################################################
+########################### Zero- inflation  ################################################
+#Now we check whether zero inflation makes the model better. Run the zero-inflated Poisson models
+
+get_prior(membership ~ 1 + (1  | fb_user_id),dL,family=zero_inflated_poisson())
+
+prior0 <- c(prior(normal(-2,1),class=Intercept),
+            prior(normal(0,.1),class=sd),
+            prior(normal(-0.85,.5),class=Intercept,dpar=zi))
+
+prior <- c(prior(normal(-2,1),class=Intercept),
+              prior(normal(0,5),class=b),
+              prior(normal(0,.1),class=sd),
+            prior(normal(-0.85,.5),class=Intercept,dpar=zi),
+            prior(normal(0,.1),class=b,dpar=zi))
+
+# Let's check the prior
+## sample_prior="only" tells the model to run without checking the data
+mGroupPrivacy5z = brm(bf(membership ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country * gender) * privacy),
+                         data=dL, family=zero_inflated_poisson(), prior=prior,
+                      sample_prior="only",cores=2,chains=2)
+# Now we visualize 100 simulations from the model, that has not seen the data, only the priors and compare them with the actual data.
+#pp_check(mGroupPrivacy5z,nsamples=100)
+
+## The priors are a bit broad: they allow for way more 0s, and way more memberships, but not radically so. So we keep them
+
+mGroupPrivacy0z = brm(bf(membership ~ 1  + (1  | fb_user_id),
+                        zi ~ 1) ,
+                     data=dL, family=zero_inflated_poisson(), prior=prior0, sample_prior=TRUE,cores=2,chains=2,
+                     iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy0z")
+mGroupPrivacy0z <- add_ic(mGroupPrivacy0z,ic="loo")
+
+mGroupPrivacy1z = brm(bf(membership ~ 1 + privacy + (1 + privacy | fb_user_id),
+                        zi ~ 1 + privacy),
+                     data=dL, family=zero_inflated_poisson(), prior=prior, sample_prior=TRUE,cores=2,chains=2,
+                     iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy1z")
+mGroupPrivacy1z <- add_ic(mGroupPrivacy1z,ic="loo")
+
+mGroupPrivacy2z = brm(bf(membership ~ 1 + country * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + country * privacy),
+                      data=dL, family=zero_inflated_poisson(), prior=prior,sample_prior=TRUE,cores=2,chains=2,
+                      iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                      file = "mGroupPrivacy2z")
+mGroupPrivacy2z <- add_ic(mGroupPrivacy2z,ic="loo")
+
+mGroupPrivacy3z = brm(bf(membership ~ 1 + gender * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + gender * privacy),
+                      data=dL, family=zero_inflated_poisson(), prior=prior,sample_prior=TRUE,cores=2,chains=2,
+                      iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                      file = "mGroupPrivacy3z")
+mGroupPrivacy3z <- add_ic(mGroupPrivacy3z,ic="loo")
+
+mGroupPrivacy4z = brm(bf(membership ~ 1 + (country + gender) * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country + gender) * privacy),
+                      data=dL, family=zero_inflated_poisson(), prior=prior,sample_prior=TRUE,cores=2,chains=2,
+                      iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                      file = "mGroupPrivacy4z")
+mGroupPrivacy4z <- add_ic(mGroupPrivacy4z,ic="loo")
+
+mGroupPrivacy5z = brm(bf(membership ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country * gender) * privacy),
+                      data=dL, family=zero_inflated_poisson(), prior=prior,sample_prior=TRUE,cores=2,chains=2,
+                      iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                      file = "mGroupPrivacy5z")
+mGroupPrivacy5z <- add_ic(mGroupPrivacy5z,ic="loo")
+
+## Now we have all these models. What should we do with them?
+## Model comparison! Which model(s) is better explaining the data
+mGroupICs = compare_ic(
+  mGroupPrivacy0,mGroupPrivacy1,mGroupPrivacy2,mGroupPrivacy3,mGroupPrivacy4,mGroupPrivacy5,
+  mGroupPrivacy0z,mGroupPrivacy1z,mGroupPrivacy2z,mGroupPrivacy3z,mGroupPrivacy4z,mGroupPrivacy5z)
+
+
+#Save as file because it's painful to run all these models
+save(mGroupPrivacy0, mGroupPrivacy1,mGroupPrivacy2,mGroupPrivacy3,mGroupPrivacy4,mGroupPrivacy5,
+     mGroupPrivacy0z,mGroupPrivacy1z,mGroupPrivacy2z,mGroupPrivacy3z,mGroupPrivacy4z,mGroupPrivacy5z,
+     mGroupICs, file = "Results/H2_GroupPrivacyResults_2")
+
+load(file="Results/H2_GroupPrivacyResults_2") 
+
+#### what's the best####### choose lowest number
+
+mGroupICs
+
+#### lowest is #####
+mGroupPrivacy5
+
+#                            LOOIC     SE
+# mGroupPrivacy0                     36880.45 799.91
+# mGroupPrivacy1                     23658.21 185.94
+# mGroupPrivacy2                     23522.14 186.43
+# mGroupPrivacy3                     23604.65 185.84
+# mGroupPrivacy4                     23512.01 187.77
+# mGroupPrivacy5                     23461.54 187.13
+# mGroupPrivacy0z                    35365.64 786.55
+# mGroupPrivacy1z                    23787.62 185.71
+# mGroupPrivacy2z                    23659.23 186.79
+# mGroupPrivacy3z                    23732.26 185.75
+# mGroupPrivacy4z                    23601.42 187.36
+# mGroupPrivacy5z                    23563.98 187.09
+# mGroupPrivacy0 - mGroupPrivacy1    13222.24 723.81
+# mGroupPrivacy0 - mGroupPrivacy2    13358.31 725.50
+# mGroupPrivacy0 - mGroupPrivacy3    13275.80 724.73
+# mGroupPrivacy0 - mGroupPrivacy4    13368.43 725.52
+# mGroupPrivacy0 - mGroupPrivacy5    13418.91 725.74
+# mGroupPrivacy0 - mGroupPrivacy0z    1514.81 166.59
+# mGroupPrivacy0 - mGroupPrivacy1z   13092.83 723.66
+# mGroupPrivacy0 - mGroupPrivacy2z   13221.22 724.52
+# mGroupPrivacy0 - mGroupPrivacy3z   13148.19 724.13
+# mGroupPrivacy0 - mGroupPrivacy4z   13279.02 724.64
+# mGroupPrivacy0 - mGroupPrivacy5z   13316.47 725.68
+# mGroupPrivacy1 - mGroupPrivacy2      136.07  28.74
+# mGroupPrivacy1 - mGroupPrivacy3       53.56  24.35
+# mGroupPrivacy1 - mGroupPrivacy4      146.19  33.75
+# mGroupPrivacy1 - mGroupPrivacy5      196.67  34.75
+# mGroupPrivacy1 - mGroupPrivacy0z  -11707.43 713.99
+# mGroupPrivacy1 - mGroupPrivacy1z    -129.41  17.04
+# mGroupPrivacy1 - mGroupPrivacy2z      -1.02  29.83
+# mGroupPrivacy1 - mGroupPrivacy3z     -74.05  25.15
+# mGroupPrivacy1 - mGroupPrivacy4z      56.79  33.92
+# mGroupPrivacy1 - mGroupPrivacy5z      94.23  36.14
+# mGroupPrivacy2 - mGroupPrivacy3      -82.51  34.09
+# mGroupPrivacy2 - mGroupPrivacy4       10.12  23.56
+# mGroupPrivacy2 - mGroupPrivacy5       60.60  25.63
+# mGroupPrivacy2 - mGroupPrivacy0z  -11843.50 715.51
+# mGroupPrivacy2 - mGroupPrivacy1z    -265.48  29.72
+# mGroupPrivacy2 - mGroupPrivacy2z    -137.09  16.35
+# mGroupPrivacy2 - mGroupPrivacy3z    -210.12  34.87
+# mGroupPrivacy2 - mGroupPrivacy4z     -79.29  24.25
+# mGroupPrivacy2 - mGroupPrivacy5z     -41.84  27.25
+# mGroupPrivacy3 - mGroupPrivacy4       92.63  28.50
+# mGroupPrivacy3 - mGroupPrivacy5      143.11  30.45
+# mGroupPrivacy3 - mGroupPrivacy0z  -11760.99 714.81
+# mGroupPrivacy3 - mGroupPrivacy1z    -182.97  25.39
+# mGroupPrivacy3 - mGroupPrivacy2z     -54.58  34.90
+# mGroupPrivacy3 - mGroupPrivacy3z    -127.61  16.82
+# mGroupPrivacy3 - mGroupPrivacy4z       3.23  29.05
+# mGroupPrivacy3 - mGroupPrivacy5z      40.67  31.78
+# mGroupPrivacy4 - mGroupPrivacy5       50.48  19.34
+# mGroupPrivacy4 - mGroupPrivacy0z  -11853.62 715.46
+# mGroupPrivacy4 - mGroupPrivacy1z    -275.60  34.97
+# mGroupPrivacy4 - mGroupPrivacy2z    -147.21  24.53
+# mGroupPrivacy4 - mGroupPrivacy3z    -220.24  29.41
+# mGroupPrivacy4 - mGroupPrivacy4z     -89.41  16.38
+# mGroupPrivacy4 - mGroupPrivacy5z     -51.96  21.30
+# mGroupPrivacy5 - mGroupPrivacy0z  -11904.10 715.71
+# mGroupPrivacy5 - mGroupPrivacy1z    -326.08  35.73
+# mGroupPrivacy5 - mGroupPrivacy2z    -197.69  26.88
+# mGroupPrivacy5 - mGroupPrivacy3z    -270.72  31.32
+# mGroupPrivacy5 - mGroupPrivacy4z    -139.89  20.30
+# mGroupPrivacy5 - mGroupPrivacy5z    -102.44  16.11
+# mGroupPrivacy0z - mGroupPrivacy1z  11578.02 713.28
+# mGroupPrivacy0z - mGroupPrivacy2z  11706.41 713.86
+# mGroupPrivacy0z - mGroupPrivacy3z  11633.38 713.70
+# mGroupPrivacy0z - mGroupPrivacy4z  11764.21 714.13
+# mGroupPrivacy0z - mGroupPrivacy5z  11801.66 715.16
+# mGroupPrivacy1z - mGroupPrivacy2z    128.39  29.26
+# mGroupPrivacy1z - mGroupPrivacy3z     55.36  23.91
+# mGroupPrivacy1z - mGroupPrivacy4z    186.19  33.47
+# mGroupPrivacy1z - mGroupPrivacy5z    223.64  35.66
+# mGroupPrivacy2z - mGroupPrivacy3z    -73.03  34.21
+# mGroupPrivacy2z - mGroupPrivacy4z     57.81  22.99
+# mGroupPrivacy2z - mGroupPrivacy5z     95.25  26.61
+# mGroupPrivacy3z - mGroupPrivacy4z    130.83  28.24
+# mGroupPrivacy3z - mGroupPrivacy5z    168.28  30.99
+# mGroupPrivacy4z - mGroupPrivacy5z     37.45  19.49
+
+#### 
+########################### H2 the best model summary plot ggplot ###############################
+
+## Here we choose the best model and we explore it.
+summary(mGroupPrivacy5) # MAKE SURE TO CHANGE TO THE BEST MODEL!
+
+# Now we wANT A PLOT TELLING US HOW THINGS ARE INTERACTING!
+conditional_effects(mGroupPrivacy5)
+
+# PRETTIER BUT LESS RIGOROUS PLOT
+ggplot(dL,aes(privacy,membership,color=gender))+geom_smooth(method=lm,formula=y~poly(x,1))+facet_grid(.~country)
+
+####################################################################
+
+############## bar plots need to be change to box plots or violin plots beeswarm plots #######
+
+ggplot(dL, aes(privacy, membership, fill=gender)) +
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge") + geom_errorbar(stat = "summary", fun.data = mean_se, position = "dodge") + 
+  facet_grid(.~country)
+
+
+######### test box plots, violin plots beeswarm plots ##################
+
+ggplot(dL, aes(privacy, membership, fill = gender)) +
+  geom_stat(stat = "summary", fun.y = mean, position = "dodge") + geom_errorbar(stat = "summary", fun.data = mean_se, position = "dodge") + 
+  facet_grid(.~country)
+
+H2Effects = conditional_effects(mGroupPrivacy5)
+H2Effects[4] 
+
+#########################################################################
+############################### report mean and se #####################
+# Females males / country
+
+mean(dL[dL$country=="Denmark" & dL$gender=="FEMALE",]$membership)
+sd(dL[dL$country=="Denmark" & dL$gender=="FEMALE",]$membership)
+mean(dL[dL$country=="Denmark" & dL$gender=="MALE",]$membership)
+sd(dL[dL$country=="Denmark" & dL$gender=="MALE",]$membership)
+mean(dL[dL$country=="Korea" & dL$gender=="FEMALE",]$membership)
+sd(dL[dL$country=="Korea" & dL$gender=="FEMALE",]$membership)
+mean(dL[dL$country=="Korea" & dL$gender=="MALE",]$membership)
+sd(dL[dL$country=="Korea" & dL$gender=="MALE",]$membership)
+
+# Females males / country / privacy
+mean(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="FEMALE",]$membership)
+sd(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="FEMALE",]$membership)
+mean(dL[dL$privacy ==2 & dL$country=="Denmark" & dL$gender=="FEMALE",]$membership)
+sd(dL[dL$privacy == 2 & dL$country=="Denmark" & dL$gender=="FEMALE",]$membership)
+mean(dL[dL$privacy ==3 & dL$country=="Denmark" & dL$gender=="FEMALE",]$membership)
+sd(dL[dL$privacy == 3 & dL$country=="Denmark" & dL$gender=="FEMALE",]$membership)
+
+mean(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="MALE",]$membership)
+sd(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="MALE",]$membership)
+mean(dL[dL$privacy ==2 & dL$country=="Denmark" & dL$gender=="MALE",]$membership)
+sd(dL[dL$privacy == 2 & dL$country=="Denmark" & dL$gender=="MALE",]$membership)
+mean(dL[dL$privacy ==3 & dL$country=="Denmark" & dL$gender=="MALE",]$membership)
+sd(dL[dL$privacy == 3 & dL$country=="Denmark" & dL$gender=="MALE",]$membership)
+
+mean(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="FEMALE",]$membership)
+sd(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="FEMALE",]$membership)
+mean(dL[dL$privacy ==2 & dL$country=="Korea" & dL$gender=="FEMALE",]$membership)
+sd(dL[dL$privacy == 2 & dL$country=="Korea" & dL$gender=="FEMALE",]$membership)
+mean(dL[dL$privacy ==3 & dL$country=="Korea" & dL$gender=="FEMALE",]$membership)
+sd(dL[dL$privacy == 3 & dL$country=="Korea" & dL$gender=="FEMALE",]$membership)
+
+mean(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="MALE",]$membership)
+sd(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="MALE",]$membership)
+mean(dL[dL$privacy ==2 & dL$country=="Korea" & dL$gender=="MALE",]$membership)
+sd(dL[dL$privacy == 2 & dL$country=="Korea" & dL$gender=="MALE",]$membership)
+mean(dL[dL$privacy ==3 & dL$country=="Korea" & dL$gender=="MALE",]$membership)
+sd(dL[dL$privacy == 3 & dL$country=="Korea" & dL$gender=="MALE",]$membership)
+
+## checks whether females indeed have more memberships than males, given everything that model knows
+
+# Here I would add hyp testing:
+# hypothesis(H2_pGroup5, "Intercept + privacy2 + privacy3 > genderMALE + genderMALE:privacy2 + genderMALE:privacy3")
+# which should give you:
+# -	An estimate of the difference (plus CI)
+# -	An evidence ratio and credibility (evidence should be >3, credibility ideally >0.95)
+
+hypothesis(mGroupPrivacy5, "Intercept + privacy2 + privacy3 > genderMALE + genderMALE:privacy2 + genderMALE:privacy3")
+
+###################### H2 model is finished ##########################
+#########################################################
+####################### ICS H2  Age test #######################
+
+# young_dL <- filter(dL, age < 30)
+# medium_dL <- filter(dL, age > 29 & age < 50)
+# old_dL <- filter(dL, age > 49)
+
+########    young_dL ####### we only test the differences of three age _the best model mGroupPrivacy5
+
+#####  new prior for youn_dL
+# A prior for the null model (without predictors)
+prior0_young_dL <- c(prior(normal(-2,1),class=Intercept), 
+            prior(normal(0,.1),class=sd))
+   
+# A prior for the models with predictors
+prior_young_dL <- c(prior(normal(-2,1),class=Intercept),
+           prior(normal(0,.5),class=b),
+           prior(normal(0,.1),class=sd))
+
+mGroupPrivacy5_young_dL = brm(membership ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id) ,data=young_dL, family=poisson,
+                     prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy5_young_dL")
+mGroupPrivacy5_young_dL <- add_ic(mGroupPrivacy5_young_dL,ic="loo")
+
+summary(mGroupPrivacy5_young_dL)
+
+
+# NOW WE WANT A PLOT TELLING US HOW THINGS ARE INTERACTING!
+# young_dL$privacy = as.factor(young_dL$privacy)
+# levels(young_dL$privacy)[1] = "Open"
+# levels(young_dL$privacy)[2] = "Closed"
+# levels(young_dL$privacy)[3] = "Secret"
+
+## plot 
+H2Effects_young_dL = conditional_effects(mGroupPrivacy5_young_dL)
+
+plot(H2Effects_young_dL)
+
+# PRETTIER BUT LESS RIGOROUS PLOT
+ggplot(young_dL,aes(privacy,membership,color=gender))+geom_smooth(method=lm,formula=y~poly(x,1))+facet_grid(.~country)
+
+
+######## medium_dL
+#####  new prior for medium_dL
+# A prior for the null model (without predictors)
+prior0_medium_dL <- c(prior(normal(-2,1),class=Intercept), 
+            prior(normal(0,.1),class=sd))
+   
+# A prior for the models with predictors
+prior_medium_dL <- c(prior(normal(-2,1),class=Intercept),
+           prior(normal(0,.5),class=b),
+           prior(normal(0,.1),class=sd))
+
+mGroupPrivacy5_medium_dL = brm(membership ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id) ,data=medium_dL, family=poisson,
+                     prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy5_medium_dL")
+mGroupPrivacy5_medium_dL <- add_ic(mGroupPrivacy5_medium_dL,ic="loo")
+
+summary(mGroupPrivacy5_medium_dL)
+
+# NOW WE WANT A PLOT TELLING US HOW THINGS ARE INTERACTING!
+# young_dL$privacy = as.factor(young_dL$privacy)
+# levels(young_dL$privacy)[1] = "Open"
+# levels(young_dL$privacy)[2] = "Closed"
+# levels(young_dL$privacy)[3] = "Secret"
+
+H2Effects_medium_dL = conditional_effects(mGroupPrivacy5_medium_dL)
+
+plot(H2Effects_medium_dL)
+
+#### old_dL
+
+#####  new prior for old_dL
+# A prior for the null model (without predictors)
+prior0_old_dL <- c(prior(normal(-2,1),class=Intercept), 
+            prior(normal(0,.1),class=sd))
+   
+# A prior for the models with predictors
+prior_old_dL <- c(prior(normal(-2,1),class=Intercept),
+           prior(normal(0,.5),class=b),
+           prior(normal(0,.1),class=sd))
+
+mGroupPrivacy5_old_dL = brm(membership ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id) ,data=old_dL, family=poisson,
+                     prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "mGroupPrivacy5_old_dL")
+mGroupPrivacy5_old_dL <- add_ic(mGroupPrivacy5_old_dL,ic="loo")
+
+summary(mGroupPrivacy5_old_dL)
+
+# NOW WE WANT A PLOT TELLING US HOW THINGS ARE INTERACTING!
+# young_dL$privacy = as.factor(young_dL$privacy)
+# levels(young_dL$privacy)[1] = "Open"
+# levels(young_dL$privacy)[2] = "Closed"
+# levels(young_dL$privacy)[3] = "Secret"
+
+H2Effects_old_dL = conditional_effects(mGroupPrivacy5_old_dL)
+
+plot(H2Effects_old_dL)
+
+########################## H2 Plot Results #############################
+```
+## Hypothesis 3 - Post _all_group membership, opend.group, closed.group, secret.group
+
+To test hypothesis 3, we used Loo-based model comparison with number of post activities on group as outcome measure and country, gender and privacy as predictors. Loo-based model comparison indicated that the model including the interaction between country, gender and privacy was the best fit to the data, even when controlling for overfitting (LOOIC: 30176.59, SE: 1008.06). 
+We observe a significant interaction between country, gender and privacy in the number of post activities (b=-0.77., se=0.02), with Danish males users have more post than females over in the open group (females: open mean= 5.35 se=.18.60 vs males open mean=8.69, se=41.66 ) and females user have more posting in closed and secret groups (female closed mean=23.77, se=44.74 ; secret mean=14.31. se=42.88 vs male closed mean=15.78, se=62.22; secret mean=8.72. se=51.71). South Korean females have fewer post than males over all privacy group  (females: open mean= 0.34, se=.2.07 ; closed mean=1.65, se=9.52 ; secret mean=7.24. se=43.14 vs males open mean=3.95, se=24.10 ; closed mean=6.41, se=41.58; secret mean=9.41. se=73,73). The differences between gender became smaller in the secret groups in Korea. The estimates also indicate that Danish female users tend to have more group post than Korean but not in open groups.
+
+
+```{r}
+
+##### H3: Gender Inequality and posts ######
+
+ggplot(subset(dL,membership>0),aes(post_specific,fill=country)) + geom_density()
+sum(dL$post_specific[dL$membership>0]==0)
+mean(log(dL$membership[dL$membership>0]))
+sd(log(dL$membership[dL$membership>0]))
+
+########################### Run H3 Post #####################################
+
+# That???s likely due to missing values.
+# 1. Check that all the models are running on the same dataset
+# 2. Check that the dataset does not contain NAs (missing values) in any column used by any model
+# 3. Once you found the missing values, remove those rows (e.g. google the complete.cases function)
+# 4. Re-run the models
+# 
+# Still doing exams. I should have some time next week to go through the script.
+
+
+# First we eyeball the data to assess whether zero inflation is an empirical issue, given it might be a conceptual one (people just not being into groups)
+
+ggplot(dL,aes(post_specific,fill=country)) + geom_density() # Big peak at 0! So it might be a problem
+sum(dL$post_specific==0) #Let??s count how many datapoints are 0: >4316 lots!
+
+# Ok First business as usual: let's build a poisson regression, prograssively adding predictors to see whether they matter in helping explaining the data
+get_prior(post_specific ~ 1 + (1  | fb_user_id),dL,family=poisson) # We check which priors we need to set
+
+# # A oruor for the null modek (without predictors)
+# prior0 <- c(prior(normal(1,1),class=Intercept), # Do I need to change all the name? 
+#             prior(normal(0,.1),class=sd))
+# 
+# # A prior for the models with preditors
+# prior <- c(prior(normal(1,1),class=Intercept),
+#               prior(normal(0,1),class=b),
+#               prior(normal(0,.1),class=sd))
+
+# new prior from Riccardo
+# A prior for the null modek (without predictors)
+prior0 <- c(prior(normal(-2,1),class=Intercept), # Do I need to change all the name?
+            prior(normal(0,.1),class=sd))
+   
+# A prior for the models with predictors
+prior <- c(prior(normal(-2,1),class=Intercept),
+           prior(normal(0,.5),class=b),
+           prior(normal(0,.1),class=sd))
+
+
+# Are the priors sensible at all??? Let's run a model that doesn't look at the data, only at the priors and check predictions
+pGroup5_prior = brm(bf(post_specific ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id)),
+                         data=subset(dL,membership>0), family=poisson, prior=prior,
+                      sample_prior="only",cores=2,chains=2)
+
+pp_check(pGroup5_prior,nsamples=100)
+
+#Run the model
+#Use a offset 0 for membership, people with no memberships can\t make posts or comments
+pGroup0 = brm(post_specific ~ 1  + offset(log(membership)) + (1  | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior0, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup0")
+pGroup0 <- add_ic(pGroup0,ic="loo")
+pGroup1 = brm(post_specific ~ 1 + privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup1")
+pGroup1 <- add_ic(pGroup1,ic="loo")
+pGroup2 = brm(post_specific ~ 1 + country * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup2")
+pGroup2 <- add_ic(pGroup2,ic="loo")
+pGroup3 = brm(post_specific ~ 1 + gender * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup3")
+pGroup3 <- add_ic(pGroup3,ic="loo")
+##  best model
+pGroup4 = brm(post_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup4")
+pGroup4 <- add_ic(pGroup4,ic="loo")
+
+pGroup5 = brm(post_specific ~ 1 + country * gender * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup5")
+pGroup5 <- add_ic(pGroup5,ic="loo")
+
+#Now we check whether zero inflation makes the model better. Run the zero-inflated Poisson models
+# I don't know how to change the prior from Riccardo's updated prior
+get_prior(post_specific ~ 1 + (1  | fb_user_id),dL,family=zero_inflated_poisson())
+
+prior0 <- c(prior(normal(-2,1),class=Intercept),
+            prior(normal(0,.1),class=sd),
+            prior(normal(-0.85,.5),class=Intercept,dpar=zi))
+
+prior <- c(prior(normal(-2,1),class=Intercept),
+              prior(normal(0,5),class=b),
+              prior(normal(0,.1),class=sd),
+            prior(normal(-0.85,.5),class=Intercept,dpar=zi),
+            prior(normal(0,.1),class=b,dpar=zi))
+
+
+# Let's check the prior
+## sample_prior="only" tells the model to run without checking the data
+pGroup5z = brm(bf(post_specific ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country * gender) * privacy),
+                         data=subset(dL,membership>0), family=zero_inflated_poisson(), prior=prior,
+                      sample_prior="only",cores=2,chains=2)
+# Now we visualize 100 simulations from the model, that has not seen the data, only the priors and compare them with the actual data.
+pp_check(pGroup5z,nsamples=100)
+
+## The priors are a bit broad: they allow for way more 0s, and way more memberships, but not radically so. So we keep themn
+
+pGroup0z = brm(bf(post_specific ~ 1 + offset(log(membership)) + (1  | fb_user_id),
+                  zi ~ 1), 
+               data=subset(dL,membership>0), family=zero_inflated_poisson(), 
+               prior=prior0, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup0z")
+pGroup0z <- add_ic(pGroup0z,ic="loo")
+
+pGroup1z = brm(bf(post_specific ~ 1 + privacy + offset(log(membership)) + (1 + privacy | fb_user_id),
+                        zi ~ 1 + privacy),
+              data=subset(dL,membership>0), family=zero_inflated_poisson(),
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+                     file = "pGroup1z")
+pGroup1z <- add_ic(pGroup1z,ic="loo")
+
+pGroup2z = brm(bf(post_specific ~ 1 + country * privacy + offset(log(membership)) + (1 + privacy | fb_user_id),
+                         zi ~ 1 + country * privacy),
+              data=subset(dL,membership>0), family=zero_inflated_poisson(), 
+               prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "pGroup2z")
+pGroup2z <- add_ic(pGroup2z,ic="loo")
+
+pGroup3z = brm(bf(post_specific ~ 1 + gender * privacy + offset(log(membership)) + (1 + privacy | fb_user_id),
+                         zi ~ 1 + gender * privacy),
+               data=subset(dL,membership>0), family=zero_inflated_poisson(),
+               prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "pGroup3z")
+pGroup3z <- add_ic(pGroup3z,ic="loo")
+
+#Sys.setenv('R_MAX_VSIZE'=32000000000)
+
+pGroup4z = brm(bf(post_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country + gender) * privacy),
+              data=subset(dL,membership>0), family=zero_inflated_poisson(),
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup4z")
+pGroup4z <- add_ic(pGroup4z,ic="loo")
+
+pGroup5z = brm(bf(post_specific ~ 1 + country * gender * privacy + offset(log(membership)) + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country * gender) * privacy),
+               data=subset(dL,membership>0), family=zero_inflated_poisson(),
+               prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "pGroup5z")
+pGroup5z <- add_ic(pGroup5z,ic="loo")
+
+## Now we have all these models. What should we do with them?
+## Model comparison! Which model(s) is better explaining the data
+
+#compare
+#'compare_ic' is deprecated and will be removed in the future. Please use 'loo_compare'
+pGroupICs = compare_ic(
+  pGroup0, pGroup1, pGroup2, pGroup3, pGroup4, pGroup5,
+  pGroup0z, pGroup1z, pGroup2z, pGroup3z,pGroup4z, pGroup5z)
+
+
+#Save as file because it's painful to run all these models
+save(pGroup0, pGroup1,pGroup2,pGroup3,pGroup4,pGroup5,
+     pGroup0z,pGroup1z,pGroup2z,pGroup3z,pGroup4z,pGroup5z,
+     pGroupICs, 
+     file = "Results/H3_pGroupResults_2")
+
+
+load(file="Results/H3_pGroupResults_2")
+
+###### what's the best model? choose the lowest #
+pGroupICs
+
+#                       LOOIC      SE
+# pGroup0              69327.73 3645.50
+# pGroup1              14678.99  190.65
+# pGroup2              14516.52  192.53
+# pGroup3              14687.34  190.96
+# pGroup4              14508.46  192.70
+# pGroup5              14540.02  193.79
+# pGroup0z             57158.13 3414.16
+# pGroup1z             15518.61  199.01
+# pGroup2z             15302.55  202.18
+# pGroup3z             15486.99  198.94
+# pGroup4z             15260.33  201.66
+# pGroup5z             15248.07  202.05
+# pGroup0 - pGroup1    54648.75 3583.82
+# pGroup0 - pGroup2    54811.21 3584.23
+# pGroup0 - pGroup3    54640.39 3584.40
+# pGroup0 - pGroup4    54819.28 3584.66
+# pGroup0 - pGroup5    54787.71 3584.73
+# pGroup0 - pGroup0z   12169.61 1373.85
+# pGroup0 - pGroup1z   53809.13 3581.24
+# pGroup0 - pGroup2z   54025.18 3580.21
+# pGroup0 - pGroup3z   53840.75 3580.58
+# pGroup0 - pGroup4z   54067.40 3580.54
+# pGroup0 - pGroup5z   54079.66 3580.60
+# pGroup1 - pGroup2      162.46   24.99
+# pGroup1 - pGroup3       -8.35   19.99
+# pGroup1 - pGroup4      170.53   27.02
+# pGroup1 - pGroup5      138.96   27.96
+# pGroup1 - pGroup0z  -42479.14 3356.26
+# pGroup1 - pGroup1z    -839.62   32.59
+# pGroup1 - pGroup2z    -623.56   37.95
+# pGroup1 - pGroup3z    -808.00   32.98
+# pGroup1 - pGroup4z    -581.35   38.78
+# pGroup1 - pGroup5z    -569.08   39.29
+# pGroup2 - pGroup3     -170.82   26.20
+# pGroup2 - pGroup4        8.06   19.72
+# pGroup2 - pGroup5      -23.50   20.87
+# pGroup2 - pGroup0z  -42641.61 3356.26
+# pGroup2 - pGroup1z   -1002.09   36.17
+# pGroup2 - pGroup2z    -786.03   32.91
+# pGroup2 - pGroup3z    -970.46   36.84
+# pGroup2 - pGroup4z    -743.81   33.37
+# pGroup2 - pGroup5z    -731.55   34.19
+# pGroup3 - pGroup4      178.88   25.48
+# pGroup3 - pGroup5      147.32   26.41
+# pGroup3 - pGroup0z  -42470.79 3356.60
+# pGroup3 - pGroup1z    -831.27   33.83
+# pGroup3 - pGroup2z    -615.21   38.84
+# pGroup3 - pGroup3z    -799.64   32.17
+# pGroup3 - pGroup4z    -572.99   38.09
+# pGroup3 - pGroup5z    -560.73   38.54
+# pGroup4 - pGroup5      -31.57   18.60
+# pGroup4 - pGroup0z  -42649.67 3356.56
+# pGroup4 - pGroup1z   -1010.15   37.27
+# pGroup4 - pGroup2z    -794.09   33.36
+# pGroup4 - pGroup3z    -978.53   35.96
+# pGroup4 - pGroup4z    -751.87   32.12
+# pGroup4 - pGroup5z    -739.61   32.50
+# pGroup5 - pGroup0z  -42618.10 3356.49
+# pGroup5 - pGroup1z    -978.58   37.70
+# pGroup5 - pGroup2z    -762.52   33.80
+# pGroup5 - pGroup3z    -946.96   36.67
+# pGroup5 - pGroup4z    -720.31   32.68
+# pGroup5 - pGroup5z    -708.05   32.15
+# pGroup0z - pGroup1z  41639.52 3350.70
+# pGroup0z - pGroup2z  41855.58 3349.75
+# pGroup0z - pGroup3z  41671.14 3350.06
+# pGroup0z - pGroup4z  41897.80 3350.00
+# pGroup0z - pGroup5z  41910.06 3349.93
+# pGroup1z - pGroup2z    216.06   26.21
+# pGroup1z - pGroup3z     31.62   18.33
+# pGroup1z - pGroup4z    258.28   27.14
+# pGroup1z - pGroup5z    270.54   28.98
+# pGroup2z - pGroup3z   -184.44   27.63
+# pGroup2z - pGroup4z     42.22   19.26
+# pGroup2z - pGroup5z     54.48   20.66
+# pGroup3z - pGroup4z    226.65   25.72
+# pGroup3z - pGroup5z    238.92   27.91
+# pGroup4z - pGroup5z     12.26   18.05
+
+
+######################### finish model 3#####################################
+
+## Here we choose the best model and we explore it.
+summary(pGroup4)# Need to chek with Riccrodo 
+# Now we wANT A PLOT TELLING US HOW THINGS ARE INTERACTING!
+conditional_effects(pGroup4)
+# PRETTIER BUT LESS RIGOROUS PLOT
+H3Effects = marginal_effects(pGroup4)
+
+H3Effects[4]
+
+
+ggplot(dL, aes(privacy, post_specific, fill=gender)) +
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge") + geom_errorbar(stat = "summary", fun.data = mean_se, position = "dodge") + 
+  facet_grid(.~country)
+
+
+##########  end of the H3 test ######### 
+
+########################## Report result  #############################
+
+#gender / country/ post
+
+# gender and privacy.
+mean(dL[ dL$privacy == 1 & dL$gender=="FEMALE",]$post_specific)
+sd(dL[ dL$privacy == 1 & dL$gender=="FEMALE",]$post_specific)
+mean(dL[ dL$privacy == 2 & dL$gender=="FEMALE",]$post_specific)
+sd(dL[ dL$privacy == 2 & dL$gender=="FEMALE",]$post_specific)
+mean(dL[ dL$privacy == 3 & dL$gender=="FEMALE",]$post_specific)
+sd(dL[ dL$privacy == 3 & dL$gender=="FEMALE",]$post_specific)
+
+mean(dL[ dL$privacy == 1 & dL$gender=="MALE",]$post_specific)
+sd(dL[ dL$privacy == 1 & dL$gender=="MALE",]$post_specific)
+mean(dL[ dL$privacy == 2 & dL$gender=="MALE",]$post_specific)
+sd(dL[ dL$privacy == 2 & dL$gender=="MALE",]$post_specific)
+mean(dL[ dL$privacy == 3 & dL$gender=="MALE",]$post_specific)
+sd(dL[ dL$privacy == 3 & dL$gender=="MALE",]$post_specific)
+
+
+#country and privacy.
+
+mean(dL[dL$privacy == 1 & dL$country=="Denmark",]$post_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Denmark" ,]$post_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Denmark" ,]$post_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Denmark" ,]$post_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Denmark",]$post_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Denmark",]$post_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Korea",]$post_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Korea" ,]$post_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Korea" ,]$post_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Korea" ,]$post_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Korea",]$post_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Korea",]$post_specific)
+
+
+## previous
+mean(dL[dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+
+
+mean(dL[dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+mean(dL[dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+
+
+mean(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+
+########################## H3 Plot Results #############################
+
+########### ICS age test ####### 
+
+### young_dL
+pGroup4_young_dL = brm(post_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(young_dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup4_young_dL")
+pGroup4_young_dL <- add_ic(pGroup4_young_dL,ic="loo")
+
+summary(pGroup4_young_dL)
+
+conditional_effects(pGroup4_young_dL)
+
+#### medium_dL
+
+pGroup4_medium_dL = brm(post_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(medium_dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup4_medium_dL")
+pGroup4_medium_dL <- add_ic(pGroup4_medium_dL,ic="loo")
+
+summary(pGroup4_medium_dL)
+
+conditional_effects(pGroup4_medium_dL)
+
+### old_dL
+
+pGroup4_old_dL = brm(post_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(old_dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "pGroup4_old_dL")
+pGroup4_old_dL <- add_ic(pGroup4_old_dL,ic="loo")
+
+summary(pGroup4_old_dL)
+
+conditional_effects(pGroup4_old_dL)
+
+
+
+```
+
+## Hypothesis 4 comment_all_group membership, opend.group, closed.group, secret.group
+
+To test hypothesis 4, we used Loo-based model comparison with number of comment activities on group as outcome measure and country, gender and privacy as predictors. Loo-based model comparison indicated that the model including the interaction between country, gender and privacy was the best fit to the data, even when controlling for overfitting (LOOIC: 81290.26, SE:  5152.80).  
+We observe a significant interaction among country, gender and privacy in the number of comments(b=-0.78., se=0.01). As it can be seen in picture ? In Danish females user have more comments than males over all privacy group but the difference are  the bigger in closed and secret groups(females: open mean= 17.61 se=.83.19 ; closed mean=123.63, se=384.96 ; secret mean=81.33. se=382.88 vs males open mean=17.17, se=64.36 ; closed mean=58.29, se=321.63; secret mean=30.34. se=146.19).  In South Korea we see the different patterns: Korean females have fewer comments  than males in the open group and closed group  (females: open mean= 1.38, se=8.13 ; closed mean=4.38, se=22.41 vs males open mean=7.34, se=37.50 ; closed mean=11.79, se=55.44;) but Korean female have more comments than male on the secret groups (female; secret mean=24.16. se=376.07  vs secret mean=16.96. se=104.51) The estimates also indicate that Danish users tend to have more group post  than Korean ones,. See plot xxx.
+
+
+
+
+```{r}
+
+##### H4: Gender Inequality and comments ######
+
+# First we eyeball the data to assess whether zero inflation is an empirical issue, given it might be a conceptual one (people just not being into groups)
+ggplot(dL,aes(comment_specific,fill=country)) + geom_density() # Big peak at 0! So it might be a problem
+sum(dL$comment_specific==0) #Let??s count how many datapoints are 0: >2000 lots!
+
+# Ok First business as usual: let's build a poisson regression, prograssively adding predictors to see whether they matter in helping explaining the data
+get_prior(comment_specific ~ 1 + (1  | fb_user_id),dL,family=poisson) # We check which priors we need to set
+
+# # A oruor for the null modek (without predictors)
+# prior0 <- c(prior(normal(1,1),class=Intercept), 
+#             prior(normal(0,.1),class=sd))
+# 
+# # A prior for the models with preditors
+# prior <- c(prior(normal(1,1),class=Intercept),
+#               prior(normal(0,1),class=b),
+#               prior(normal(0,.1),class=sd))
+
+# new prior from Riccardo
+# A prior for the null modek (without predictors)
+prior0 <- c(prior(normal(-2,1),class=Intercept), # Do I need to change all the name?
+            prior(normal(0,.1),class=sd))
+   
+# A prior for the models with predictors
+prior <- c(prior(normal(-2,1),class=Intercept),
+           prior(normal(0,.5),class=b),
+           prior(normal(0,.1),class=sd))
+
+# Are the priors sensible at all??? Let's run a model that doesn't look at the data, only at the priors and check predictions
+cGroup5_prior = brm(bf(comment_specific ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id)),
+                         data=subset(dL,membership>0), family=poisson, prior=prior,
+                      sample_prior="only",cores=2,chains=2)
+
+pp_check(cGroup5_prior,nsamples=100)
+
+############  H4 Run Models ###############
+#Also offset for membership here
+cGroup0 = brm(comment_specific ~ 1  + offset(log(membership)) + (1  | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior0, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup0")
+cGroup0 <- add_ic(cGroup0,ic="loo",
+                  file = "cGroup0")
+
+cGroup1 = brm(comment_specific ~ 1 + privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup1")
+cGroup1 <- add_ic(cGroup1,ic="loo",
+                  file = "cGroup1")
+
+cGroup2 = brm(comment_specific ~ 1 + country * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup2")
+cGroup2 <- add_ic(cGroup2,ic="loo",
+                  file = "cGroup2")
+
+cGroup3 = brm(comment_specific ~ 1 + gender * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup3")
+cGroup3 <- add_ic(cGroup3,ic="loo",
+                  file = "cGroup3")
+## best model
+cGroup4 = brm(comment_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup4")
+cGroup4 <- add_ic(cGroup4,ic="loo",
+                  file = "cGroup4")
+
+cGroup5 = brm(comment_specific ~ 1 + country * gender * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup5")
+cGroup5 <- add_ic(cGroup5,ic="loo",
+                  file = "cGroup5")
+
+# #Now we check whether zero inflation makes the model better. Run the zero-inflated Poisson models
+# 
+# 
+# prior0 <- c(prior(normal(1,1),class=Intercept),
+#             prior(normal(0,.1),class=sd),
+#             prior(normal(-0.85,.5),class=Intercept,dpar=zi))
+# 
+# prior <- c(prior(normal(1,1),class=Intercept),
+#               prior(normal(0,1),class=b),
+#               prior(normal(0,.1),class=sd),
+#             prior(normal(-0.85,.5),class=Intercept,dpar=zi),
+#             prior(normal(0,.1),class=b,dpar=zi))
+
+#Now we check whether zero inflation makes the model better. Run the zero-inflated Poisson models
+get_prior(comment_specific ~ 1 + (1  | fb_user_id),dL,family=zero_inflated_poisson())
+prior0 <- c(prior(normal(-2,1),class=Intercept),
+            prior(normal(0,.1),class=sd),
+            prior(normal(-0.85,.5),class=Intercept,dpar=zi))
+
+prior <- c(prior(normal(-2,1),class=Intercept),
+              prior(normal(0,5),class=b),
+              prior(normal(0,.1),class=sd),
+            prior(normal(-0.85,.5),class=Intercept,dpar=zi),
+            prior(normal(0,.1),class=b,dpar=zi))
+
+
+# Let's check the prior
+## sample_prior="only" tells the model to run without checking the data
+cGroup5z = brm(bf(comment_specific ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country * gender) * privacy),
+                         data=subset(dL,membership>0), family=zero_inflated_poisson(), prior=prior,
+                      sample_prior="only",cores=2,chains=2)
+# Now we visualize 100 simulations from the model, that has not seen the data, only the priors and compare them with the actual data.
+pp_check(cGroup5z,nsamples=100)
+## The priors are a bit broad: they allow for way more 0s, and way more memberships, but not radically so. So we keep themn
+
+cGroup0z = brm(bf(comment_specific ~ 1  + (1  | fb_user_id),
+                        zi ~ 1) ,
+                     data=subset(dL,membership>0), family=zero_inflated_poisson(),
+               prior=prior0, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "cGroup0z")
+cGroup0z <- add_ic(cGroup0z,ic="loo")
+
+cGroup1z = brm(bf(comment_specific ~ 1 + privacy + (1 + privacy | fb_user_id),
+                        zi ~ 1 + privacy),
+                     data=subset(dL,membership>0), family=zero_inflated_poisson(),
+               prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "cGroup1z")
+cGroup1z <- add_ic(cGroup1z,ic="loo")
+
+cGroup2z = brm(bf(comment_specific ~ 1 + country * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + country * privacy),
+                      data=subset(dL,membership>0), family=zero_inflated_poisson(), 
+               prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "cGroup2z")
+
+cGroup2z <- add_ic(cGroup2z,ic="loo")
+
+cGroup3z = brm(bf(comment_specific ~ 1 + gender * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + gender * privacy),
+                         data=subset(dL,membership>0), family=zero_inflated_poisson(),
+               prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "cGroup3z")
+cGroup3z <- add_ic(cGroup3z,ic="loo")
+
+cGroup4z = brm(bf(comment_specific ~ 1 + (country + gender) * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country + gender) * privacy),
+                         data=subset(dL,membership>0), family=zero_inflated_poisson(),
+               prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "cGroup4z")
+cGroup4z <- add_ic(cGroup4z,ic="loo")
+
+cGroup5z = brm(bf(comment_specific ~ 1 + country * gender * privacy + (1 + privacy | fb_user_id),
+                         zi ~ 1 + (country * gender) * privacy),
+                         data=subset(dL,membership>0), family=zero_inflated_poisson(),
+               prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+               file = "cGroup5z")
+cGroup5z <- add_ic(cGroup5z,ic="loo")
+
+## Now we have all these models. What should we do with them?
+## Model comparison! Which model(s) is better explaining the data
+#Compare
+cGroupICs = compare_ic(
+  cGroup0, cGroup1, cGroup2, cGroup3, cGroup4, cGroup5,
+  cGroup0z, cGroup1z, cGroup2z, cGroup3z, cGroup4z, cGroup5z)
+
+#Save as a file
+save(cGroup0, cGroup1,cGroup2,cGroup3,cGroup4,cGroup5,
+     cGroup0z, cGroup1z, cGroup2z, cGroup3z, cGroup4z, cGroup5z,
+     cGroupICs, file = "Results/H4_GroupCommentResults_2")
+
+
+load(file="Results/H4_GroupCommentResults_2")
+
+################ finish H4 ################################## 
+
+#Compare
+cGroupICs
+#                    LOOIC       SE
+# cGroup0              230514.99 18721.33
+# cGroup1               18954.80   204.43
+# cGroup2               18853.62   206.55
+# cGroup3               18950.57   204.52
+# cGroup4               18835.92   206.72
+# cGroup5               18860.07   207.28
+# cGroup0z             214219.42 17434.86
+# cGroup1z              20642.52   211.87
+# cGroup2z              20336.62   214.17
+# cGroup3z              20640.33   212.07
+# cGroup4z              20325.08   214.37
+# cGroup5z              20247.44   214.02
+# cGroup0 - cGroup1    211560.19 18674.13
+# cGroup0 - cGroup2    211661.37 18673.45
+# cGroup0 - cGroup3    211564.42 18674.25
+# cGroup0 - cGroup4    211679.08 18674.05
+# cGroup0 - cGroup5    211654.92 18674.00
+# cGroup0 - cGroup0z    16295.58 11046.93
+# cGroup0 - cGroup1z   209872.47 18672.79
+# cGroup0 - cGroup2z   210178.38 18672.21
+# cGroup0 - cGroup3z   209874.66 18672.87
+# cGroup0 - cGroup4z   210189.91 18672.37
+# cGroup0 - cGroup5z   210267.55 18672.68
+# cGroup1 - cGroup2       101.18    24.89
+# cGroup1 - cGroup3         4.23    21.64
+# cGroup1 - cGroup4       118.88    25.51
+# cGroup1 - cGroup5        94.73    26.49
+# cGroup1 - cGroup0z  -195264.62 17387.58
+# cGroup1 - cGroup1z    -1687.72    45.80
+# cGroup1 - cGroup2z    -1381.82    48.99
+# cGroup1 - cGroup3z    -1685.53    46.59
+# cGroup1 - cGroup4z    -1370.29    49.27
+# cGroup1 - cGroup5z    -1292.65    48.09
+# cGroup2 - cGroup3       -96.95    25.63
+# cGroup2 - cGroup4        17.71    20.17
+# cGroup2 - cGroup5        -6.45    21.56
+# cGroup2 - cGroup0z  -195365.79 17386.92
+# cGroup2 - cGroup1z    -1788.90    48.15
+# cGroup2 - cGroup2z    -1482.99    44.99
+# cGroup2 - cGroup3z    -1786.71    48.88
+# cGroup2 - cGroup4z    -1471.46    45.17
+# cGroup2 - cGroup5z    -1393.82    44.00
+# cGroup3 - cGroup4       114.65    24.89
+# cGroup3 - cGroup5        90.50    25.79
+# cGroup3 - cGroup0z  -195268.85 17387.57
+# cGroup3 - cGroup1z    -1691.95    46.56
+# cGroup3 - cGroup2z    -1386.05    49.59
+# cGroup3 - cGroup3z    -1689.76    46.45
+# cGroup3 - cGroup4z    -1374.51    49.02
+# cGroup3 - cGroup5z    -1296.87    48.14
+# cGroup4 - cGroup5       -24.15    20.68
+# cGroup4 - cGroup0z  -195383.50 17387.49
+# cGroup4 - cGroup1z    -1806.60    48.64
+# cGroup4 - cGroup2z    -1500.70    45.62
+# cGroup4 - cGroup3z    -1804.42    48.76
+# cGroup4 - cGroup4z    -1489.17    45.19
+# cGroup4 - cGroup5z    -1411.53    43.98
+# cGroup5 - cGroup0z  -195359.35 17387.14
+# cGroup5 - cGroup1z    -1782.45    49.07
+# cGroup5 - cGroup2z    -1476.55    46.25
+# cGroup5 - cGroup3z    -1780.26    49.32
+# cGroup5 - cGroup4z    -1465.01    45.95
+# cGroup5 - cGroup5z    -1387.37    44.11
+# cGroup0z - cGroup1z  193576.90 17383.23
+# cGroup0z - cGroup2z  193882.80 17382.99
+# cGroup0z - cGroup3z  193579.08 17383.41
+# cGroup0z - cGroup4z  193894.33 17383.11
+# cGroup0z - cGroup5z  193971.97 17383.96
+# cGroup1z - cGroup2z     305.90    28.98
+# cGroup1z - cGroup3z       2.19    19.62
+# cGroup1z - cGroup4z     317.43    29.91
+# cGroup1z - cGroup5z     395.08    31.30
+# cGroup2z - cGroup3z    -303.72    30.80
+# cGroup2z - cGroup4z      11.53    18.38
+# cGroup2z - cGroup5z      89.17    20.36
+# cGroup3z - cGroup4z     315.25    30.04
+# cGroup3z - cGroup5z     392.89    31.74
+# cGroup4z - cGroup5z      77.64    19.05
+
+
+
+#############################################
+
+summary(cGroup4)
+
+conditional_effects(cGroup4)
+
+H4Effects = marginal_effects(cGroup4)
+
+H4Effects[3]
+
+
+########################## Plot Results #############################
+
+ggplot(dL, aes(privacy, comment_specific, fill = gender)) +
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge") + geom_errorbar(stat = "summary", fun.data = mean_se, position = "dodge") + 
+  facet_grid(.~country)
+
+########################## H4 Report result  #############################
+
+# Females males / country/ comment
+
+# gender and privacy.
+mean(dL[ dL$privacy == 1 & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[ dL$privacy == 1 & dL$gender=="FEMALE",]$comment_specific)
+mean(dL[ dL$privacy == 2 & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[ dL$privacy == 2 & dL$gender=="FEMALE",]$comment_specific)
+mean(dL[ dL$privacy == 3 & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[ dL$privacy == 3 & dL$gender=="FEMALE",]$comment_specific)
+
+mean(dL[ dL$privacy == 1 & dL$gender=="MALE",]$comment_specific)
+sd(dL[ dL$privacy == 1 & dL$gender=="MALE",]$comment_specific)
+mean(dL[ dL$privacy == 2 & dL$gender=="MALE",]$comment_specific)
+sd(dL[ dL$privacy == 2 & dL$gender=="MALE",]$comment_specific)
+mean(dL[ dL$privacy == 3 & dL$gender=="MALE",]$comment_specific)
+sd(dL[ dL$privacy == 3 & dL$gender=="MALE",]$comment_specific)
+
+#country and privacy.
+
+mean(dL[dL$privacy == 1 & dL$country=="Denmark",]$comment_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Denmark" ,]$comment_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Denmark" ,]$comment_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Denmark" ,]$comment_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Denmark",]$comment_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Denmark",]$comment_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Korea",]$comment_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Korea" ,]$comment_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Korea" ,]$comment_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Korea" ,]$comment_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Korea",]$comment_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Korea",]$comment_specific)
+
+#previous
+
+mean(dL[dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$country=="Denmark" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$country=="Denmark" & dL$gender=="MALE",]$post_specific)
+mean(dL[dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+sd(dL[dL$country=="Korea" & dL$gender=="FEMALE",]$post_specific)
+mean(dL[dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+sd(dL[dL$country=="Korea" & dL$gender=="MALE",]$post_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="FEMALE",]$comment_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Denmark" & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Denmark" & dL$gender=="FEMALE",]$comment_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Denmark" & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Denmark" & dL$gender=="FEMALE",]$comment_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="MALE",]$comment_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Denmark" & dL$gender=="MALE",]$comment_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Denmark" & dL$gender=="MALE",]$comment_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Denmark" & dL$gender=="MALE",]$comment_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Denmark" & dL$gender=="MALE",]$comment_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Denmark" & dL$gender=="MALE",]$comment_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="FEMALE",]$comment_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Korea" & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Korea" & dL$gender=="FEMALE",]$comment_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Korea" & dL$gender=="FEMALE",]$comment_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Korea" & dL$gender=="FEMALE",]$comment_specific)
+
+mean(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="MALE",]$comment_specific)
+sd(dL[dL$privacy == 1 & dL$country=="Korea" & dL$gender=="MALE",]$comment_specific)
+mean(dL[dL$privacy ==2 & dL$country=="Korea" & dL$gender=="MALE",]$comment_specific)
+sd(dL[dL$privacy == 2 & dL$country=="Korea" & dL$gender=="MALE",]$comment_specific)
+mean(dL[dL$privacy ==3 & dL$country=="Korea" & dL$gender=="MALE",]$comment_specific)
+sd(dL[dL$privacy == 3 & dL$country=="Korea" & dL$gender=="MALE",]$comment_specific)
+
+########## ICS #################  
+# young_dL
+  
+cGroup4_young_dL = brm(comment_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(young_dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup4_young_dL")
+cGroup4_young_dL <- add_ic(cGroup4_young_dL,ic="loo",
+                  file = "cGroup4_young_dL")
+summary(cGroup4_young_dL)
+
+conditional_effects(cGroup4_young_dL)
+
+## medium_dL
+cGroup4_medium_dL = brm(comment_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(medium_dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup4_medium_dL")
+cGroup4_medium_dL <- add_ic(cGroup4_medium_dL,ic="loo",
+                  file = "cGroup4_medium_dL")
+summary(cGroup4_medium_dL)
+
+conditional_effects(cGroup4_medium_dL)
+
+
+## old_dL
+cGroup4_old_dL = brm(comment_specific ~ 1 + (country + gender) * privacy + offset(log(membership)) + (1 + privacy | fb_user_id) ,data=subset(old_dL,membership>0), family=poisson,
+              prior=prior, sample_prior=TRUE,cores=2,chains=2,iter=8000,control=list(adapt_delta = 0.99, max_treedepth=20),
+              file = "cGroup4_old_dL")
+cGroup4_old_dL <- add_ic(cGroup4_old_dL,ic="loo",
+                  file = "cGroup4_old_dL")
+summary(cGroup4_old_dL)
+
+conditional_effects(cGroup4_old_dL)
+
+
+#### the end ######
+
